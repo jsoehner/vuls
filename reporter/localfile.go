@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/CycloneDX/cyclonedx-go"
 	"golang.org/x/xerrors"
@@ -44,7 +45,13 @@ func (w LocalFileWriter) Write(rs ...models.ScanResult) (err error) {
 	for _, r := range rs {
 		r.SortForJSONOutput()
 
-		path := filepath.Join(w.CurrentDir, r.ReportFileName())
+		cleanDir := filepath.Clean(w.CurrentDir)
+		path := filepath.Join(cleanDir, r.ReportFileName())
+		cleanPath := filepath.Clean(path)
+		rel, err := filepath.Rel(cleanDir, cleanPath)
+		if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+			return xerrors.Errorf("invalid file path %s: escapes directory %s", path, w.CurrentDir)
+		}
 		if w.FormatJSON {
 			p := path + ".json"
 			if w.DiffPlus || w.DiffMinus {
@@ -134,12 +141,18 @@ func (w LocalFileWriter) Write(rs ...models.ScanResult) (err error) {
 }
 
 func (w LocalFileWriter) writeFile(path string, data []byte, perm os.FileMode) (err error) {
+	cleanPath := filepath.Clean(path)
+	cleanDir := filepath.Clean(w.CurrentDir)
+	rel, err := filepath.Rel(cleanDir, cleanPath)
+	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+		return xerrors.Errorf("invalid file path %s: escapes directory %s", path, w.CurrentDir)
+	}
 	if w.Gzip {
 		data, err = gz(data)
 		if err != nil {
 			return err
 		}
-		path += ".gz"
+		cleanPath += ".gz"
 	}
-	return os.WriteFile(path, []byte(data), perm)
+	return os.WriteFile(cleanPath, []byte(data), perm)
 }
