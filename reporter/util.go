@@ -708,13 +708,20 @@ func formatCsvList(r models.ScanResult, path string) error {
 		})
 	}
 
-	file, err := os.Create(path)
+	cleanPath := filepath.Clean(path)
+	dir := filepath.Dir(cleanPath)
+	rel, err := filepath.Rel(dir, cleanPath)
+	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+		return xerrors.Errorf("invalid file path %s: escapes directory", path)
+	}
+
+	file, err := os.Create(cleanPath)
 	if err != nil {
-		return xerrors.Errorf("Failed to create a file: %s, err: %w", path, err)
+		return xerrors.Errorf("Failed to create a file: %s, err: %w", cleanPath, err)
 	}
 	defer file.Close()
 	if err := csv.NewWriter(file).WriteAll(data); err != nil {
-		return xerrors.Errorf("Failed to write to file: %s, err: %w", path, err)
+		return xerrors.Errorf("Failed to write to file: %s, err: %w", cleanPath, err)
 	}
 	return nil
 }
